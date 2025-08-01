@@ -36,8 +36,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Groq client setup
-groq_client = groq.Groq(api_key=os.getenv("GROQ_API_KEY"))
+# Groq client setup with explicit HTTP client configuration
+groq_client = groq.Groq(
+    api_key=os.getenv("GROQ_API_KEY"),
+    http_client=groq._base_client.SyncHttpxClientWrapper()  # Avoid proxies issue
+)
 
 # Sentence transformer for embeddings (load once at startup)
 model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
