@@ -17,17 +17,20 @@ import tempfile
 import logging
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Load environment variables
 load_dotenv()
+
+# Initialize FastAPI app
 app = FastAPI(title="LLM-Powered Query-Retrieval System", openapi_url="/api/v1/openapi.json")
 security = HTTPBearer()
 
-# CORS configuration (adjust origins as needed)
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Update this to specific domains if necessary
+    allow_origins=["*"],  # Update to specific domains in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,8 +39,8 @@ app.add_middleware(
 # Groq client setup
 groq_client = groq.Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# Sentence transformer for embeddings
-model = SentenceTransformer('all-MiniLM-L6-v2')
+# Sentence transformer for embeddings (load once at startup)
+model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
 
 # Dimension of embeddings
 dimension = 384
@@ -50,7 +53,7 @@ class QueryResponse(BaseModel):
     answers: List[str]
 
 def authenticate(credentials: HTTPAuthorizationCredentials = Security(security)):
-    expected_token = os.getenv("API_KEY")  # Use environment variable for token
+    expected_token = os.getenv("API_KEY")
     if credentials.credentials != expected_token:
         raise HTTPException(status_code=401, detail="Invalid token")
     return credentials.credentials
@@ -121,7 +124,6 @@ async def process_document(url: str) -> List[str]:
         elif 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' in content_type:
             text = extract_text_from_docx(temp_file_path)
         else:
-            # Assume plain text or email
             try:
                 with open(temp_file_path, "r", encoding="utf-8") as f:
                     text = f.read()
@@ -140,7 +142,7 @@ async def process_document(url: str) -> List[str]:
     finally:
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
-            logger.debug(f"Deleted temporary file: {temp_file_path}")
+            logger.debug(f"Deleted temporary file: {tmp_file_path}")
 
 def generate_answer(query: str, context: List[str]) -> str:
     context_text = "\n".join(context) if context else "No relevant context found."
@@ -177,14 +179,14 @@ async def run_query(request: QueryRequest, token: str = Depends(authenticate)):
         
         # Create a temporary FAISS index for this document
         temp_index = faiss.IndexFlatL2(dimension)
-        embeddings = model.encode(chunks)
+        embeddings = model.encode(chunks, batch_size=16)  # Reduce batch size to lower memory usage
         temp_index.add(np.array(embeddings, dtype=np.float32))
         
         # Process each question
         answers = []
         for question in request.questions:
             logger.debug(f"Processing question: {question}")
-            query_embedding = model.encode([question])[0]
+            query_embedding = model.encode([question], batch_size=1)[0]
             distances, indices = temp_index.search(np.array([query_embedding], dtype=np.float32), k=5)
             relevant_chunks = [chunks[i] for i in indices[0] if i >= 0 and i < len(chunks)]
             
@@ -199,5 +201,5 @@ async def run_query(request: QueryRequest, token: str = Depends(authenticate)):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))  # Use PORT from environment, default to 8000
+    port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
