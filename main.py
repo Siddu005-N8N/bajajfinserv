@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 from PyPDF2 import PdfReader
@@ -23,6 +24,15 @@ load_dotenv()
 app = FastAPI(title="LLM-Powered Query-Retrieval System", openapi_url="/api/v1/openapi.json")
 security = HTTPBearer()
 
+# CORS configuration (adjust origins as needed)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Update this to specific domains if necessary
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Groq client setup
 groq_client = groq.Groq(api_key=os.getenv("GROQ_API_KEY"))
 
@@ -40,7 +50,7 @@ class QueryResponse(BaseModel):
     answers: List[str]
 
 def authenticate(credentials: HTTPAuthorizationCredentials = Security(security)):
-    expected_token = "225bc5a220c1e087a557d9738720c84d5a1dca03fd966f83977f563fe741968d"
+    expected_token = os.getenv("API_KEY")  # Use environment variable for token
     if credentials.credentials != expected_token:
         raise HTTPException(status_code=401, detail="Invalid token")
     return credentials.credentials
@@ -141,7 +151,7 @@ Question: {query}
 Provide a precise answer based on the context, including an explanation of how the answer was derived."""
     try:
         response = groq_client.chat.completions.create(
-            model="gemma2-9b-it",
+            model="mixtral-8x7b-32768",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=500
         )
@@ -153,6 +163,10 @@ Provide a precise answer based on the context, including an explanation of how t
 @app.get("/")
 async def root():
     return {"message": "Welcome to the LLM-Powered Query-Retrieval System. Use POST /hackrx/run to submit queries."}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
 @app.post("/hackrx/run", response_model=QueryResponse)
 async def run_query(request: QueryRequest, token: str = Depends(authenticate)):
@@ -185,4 +199,5 @@ async def run_query(request: QueryRequest, token: str = Depends(authenticate)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="localhost", port=8000)
+    port = int(os.getenv("PORT", 8000))  # Use PORT from environment, default to 8000
+    uvicorn.run(app, host="0.0.0.0", port=port)
