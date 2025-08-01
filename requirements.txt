@@ -1,0 +1,9 @@
+fastapi 
+uvicorn 
+requests 
+PyPDF2 
+python-docx 
+sentence-transformers 
+faiss-cpu 
+groq 
+supabase
