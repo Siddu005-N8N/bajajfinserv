@@ -142,7 +142,7 @@ async def process_document(url: str) -> List[str]:
     finally:
         if os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
-            logger.debug(f"Deleted temporary file: {tmp_file_path}")
+            logger.debug(f"Deleted temporary file: {temp_file_path}")
 
 def generate_answer(query: str, context: List[str]) -> str:
     context_text = "\n".join(context) if context else "No relevant context found."
@@ -179,7 +179,7 @@ async def run_query(request: QueryRequest, token: str = Depends(authenticate)):
         
         # Create a temporary FAISS index for this document
         temp_index = faiss.IndexFlatL2(dimension)
-        embeddings = model.encode(chunks, batch_size=16)  # Reduce batch size to lower memory usage
+        embeddings = model.encode(chunks, batch_size=16)
         temp_index.add(np.array(embeddings, dtype=np.float32))
         
         # Process each question
