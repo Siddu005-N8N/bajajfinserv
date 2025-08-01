@@ -8,3 +8,4 @@ faiss-cpu==1.8.0
 groq==0.11.0
 aiohttp==3.10.5
 python-dotenv==1.0.1
+numpy==1.26.4
